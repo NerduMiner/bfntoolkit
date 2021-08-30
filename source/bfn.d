@@ -193,9 +193,20 @@ void extractImage(File bfn, string folderName, uint page_data_size, ushort textu
     writePng((folderName ~ "/" ~ fileName), outputImage);
 }
 
-///Takes an image and converts it into a BTI Glyph Page
+///Takes an image and converts it into a BTI Glyph Page, currently unused cause dang there is like no straight info on how you do this
 void convertImage(string imageName, string fileName, ushort texture_format, ushort texture_height, ushort texture_width) {
-    MemoryImage inputImage = readPng(filename ~ "/" ~ imageName);
+    MemoryImage inputImage = readPng(fileName ~ "/" ~ imageName);
+    ubyte[] result, block, blockResult;
+    int step;
+    
+    if (texture_format == 2)
+    {
+    	step = max(texture_width * texture_height / 4 / 8 / 100, 2048);
+    } 
+    else if (texture_format == 0) 
+    {
+    	step = max(texture_width * texture_height / 8 / 8 / 100, 2048);	
+    }
 }
 
 int extractBFN(File bfn) {
@@ -301,22 +312,23 @@ int repackBFN(string fileName) {
     const Json jsonInfo = parseJsonString(jsonData);
     BFNInfo bfninfo = deserializeJson!BFNInfo(jsonInfo);
     BinaryWriter writer = BinaryWriter(ByteOrder.BigEndian);
-    File newBFN = File((fileName ~ ".bfn"), "wb");
+    File newBFN = File((fileName ~ "_new.bfn"), "wb");
     ubyte[] sectionBuffer;
     //Write Section Data to a separate buffer first since Header Data
     //Has to be figured out last
     //WRITE INF1 SECTION(Only the last one matters)
-    writer.write(cast(char[])(bfninfo.inf1[-1].section_name));
-    writer.write(to!uint(bfninfo.inf1[-1].section_size));
-    writer.write(to!ushort(bfninfo.inf1[-1].encoding));
-    writer.write(to!ushort(bfninfo.inf1[-1].ascent));
-    writer.write(to!ushort(bfninfo.inf1[-1].descent));
-    writer.write(to!ushort(bfninfo.inf1[-1].width));
-    writer.write(to!ushort(bfninfo.inf1[-1].fallback_code));
-    writer.write(to!uint(bfninfo.inf1[-1].unk1));
-    writer.write(new ubyte[8]); //Padding
+    writer.writeArray(cast(char[])(bfninfo.inf1[$ - 1].section_name));
+    writer.write(to!uint(bfninfo.inf1[$ - 1].section_size));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].encoding));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].ascent));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].descent));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].width));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].leading));
+    writer.write(to!ushort(bfninfo.inf1[$ - 1].fallback_code));
+    writer.write(to!uint(bfninfo.inf1[$ - 1].unk1));
+    writer.writeArray(new ubyte[8]); //Padding
     //WRITE GLY1 SECTION (Assuming there is only one of these)
-    writer.write(cast(char[])(bfninfo.gly1[0].section_name));
+    writer.writeArray(cast(char[])(bfninfo.gly1[0].section_name));
     writer.write(to!uint(bfninfo.gly1[0].section_size));
     writer.write(to!ushort(bfninfo.gly1[0].start_glyph));
     writer.write(to!ushort(bfninfo.gly1[0].end_glyph));
@@ -328,12 +340,53 @@ int repackBFN(string fileName) {
     writer.write(to!ushort(bfninfo.gly1[0].glyph_vertical_count));
     writer.write(to!ushort(bfninfo.gly1[0].texture_width));
     writer.write(to!ushort(bfninfo.gly1[0].texture_height));
-    writer.write(new ubyte[2]); //Padding
+    writer.writeArray(new ubyte[2]); //Padding
     const uint sheetCount = ((bfninfo.gly1[0].end_glyph - bfninfo.gly1[0].start_glyph) / 
         (bfninfo.gly1[0].glyph_horizontal_count * bfninfo.gly1[0].glyph_vertical_count) + 1);
     for (int i = 0; i < sheetCount; i++)
     {
-
+    	//Right now we expect end user to convert the images through other means
+    	string btiFileName = fileName ~ "/" ~ "char_" ~ to!string(i) ~ ".bti";
+		ubyte[] imgData = cast(ubyte[])read(btiFileName);
+		writer.writeArray(imgData);
     }
+    //WRITE MAP1 SECTION
+    for (int i = 0; i < bfninfo.map1.length; i++)
+    {
+    	writer.writeArray(cast(char[])(bfninfo.map1[i].section_name));	
+    	writer.write(to!uint(bfninfo.map1[i].section_size));	
+    	writer.write(to!ushort(bfninfo.map1[i].mapping_type));	
+    	writer.write(to!ushort(bfninfo.map1[i].first_char));	
+    	writer.write(to!ushort(bfninfo.map1[i].last_char));	
+    	writer.write(to!ushort(bfninfo.map1[i].mapping_entry_count));
+    	if (bfninfo.map1[i].entries != null)
+    	{
+    		writer.write(bfninfo.map1[i].entries);
+    	}
+    }
+    while (writer.buffer.length % 0x20 != 0)
+    {
+    	writer.writeArray(new ubyte[1]);
+    }
+    ///WRITE WID1 SECTION
+    writer.writeArray(cast(char[])(bfninfo.wid1[0].section_name));
+    writer.write(to!uint(bfninfo.wid1[0].section_size));
+    writer.write(to!ushort(bfninfo.wid1[0].first_code_included));
+    writer.write(to!ushort(bfninfo.wid1[0].last_code_included));
+    for (int i = 0; i < bfninfo.wid1[0].packets.length; i++)
+    {
+    	writer.write(to!ubyte(bfninfo.wid1[0].packets[i].kerning));
+    	writer.write(to!ubyte(bfninfo.wid1[0].packets[i].width));
+    }
+    ///Begin Writing to File
+    BinaryWriter header = BinaryWriter(ByteOrder.BigEndian);
+    header.writeArray(cast(char[])"FONTbfn1");
+    header.write(to!uint(writer.buffer.length + 32));
+    header.write(to!uint(bfninfo.inf1.length + bfninfo.gly1.length + bfninfo.map1.length + bfninfo.wid1.length));
+    header.writeArray(new ubyte[16]);
+    newBFN.rawWrite(header.buffer);
+    newBFN.rawWrite(writer.buffer);
+    header.clear();
+    writer.clear();
     return 0;
 }
