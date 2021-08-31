@@ -28,7 +28,11 @@ int main(string[] args)
 			writeln("Repacking BFN file...");
 			if (args[2] != null)
 			{
-				//
+				repackBFN(args[2]);
+			}
+			else
+			{
+				throw new Exception("No foldername given. Please provide foldername or full filepath to folder");
 			}
 			writeln("Done!");
 			break;

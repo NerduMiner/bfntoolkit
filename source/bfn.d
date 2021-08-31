@@ -142,6 +142,8 @@ void extractImage(File bfn, string folderName, uint page_data_size, ushort textu
     TrueColorImage outputImage = new TrueColorImage(texture_width, texture_height);
     auto colorData = outputImage.imageData.colors;
     ubyte[] glyphData = readAmount(bfn, page_data_size);
+    //auto debugData = File(folderName ~ "/" ~ fileName ~ "_debug.bti", "wb");
+    //debugData.rawWrite(glyphData);
     uint i = 0;
     assert(texture_format == 2 || texture_format == 0); //Texture Format is either IA4 or I4
     writefln("Image Format of %s: %s", fileName, texture_format);
@@ -194,19 +196,77 @@ void extractImage(File bfn, string folderName, uint page_data_size, ushort textu
 }
 
 ///Takes an image and converts it into a BTI Glyph Page, currently unused cause dang there is like no straight info on how you do this
-void convertImage(string imageName, string fileName, ushort texture_format, ushort texture_height, ushort texture_width) {
+ubyte[] convertImage(string imageName, string fileName, ushort texture_format, ushort texture_height, ushort texture_width) {
     MemoryImage inputImage = readPng(fileName ~ "/" ~ imageName);
     ubyte[] result, block, blockResult;
-    int step;
-    
-    if (texture_format == 2)
+    uint blockWidth, blockHeight;
+    result ~= new ubyte[32]; //Blank Header
+    if (texture_format == 2) //IA4
     {
-    	step = max(texture_width * texture_height / 4 / 8 / 100, 2048);
-    } 
-    else if (texture_format == 0) 
-    {
-    	step = max(texture_width * texture_height / 8 / 8 / 100, 2048);	
+        blockWidth = 8;
+        blockHeight = 4;
     }
+    else if (texture_format == 0) //I4
+    {
+        blockWidth = 8;
+        blockHeight = 8;
+    }
+    uint blockX, blockY;
+    if (texture_format == 2) {
+        for (ubyte iy = 0; iy < (texture_height); iy++) {
+            for(ubyte ix = 0; ix < (texture_width); ix++) {
+                for (ubyte y = 0; y < 4; y++) {
+                    for (ubyte x = 0; x < 8; x++) {
+                    	ubyte ia4;
+                    	Color pixel = inputImage.getPixel(x, y);
+                        ubyte intensity = cast(ubyte)round(((pixel.r * 30) + (pixel.g * 59) + (pixel.b * 11)) / 100);
+                        ia4 |= ((intensity >> 4) & 0xF);
+                        ia4 |= (pixel.a & 0xF0);
+                        result ~= ia4;
+                    }
+                }
+            }
+        }
+    }
+    /*while (blockY < texture_height) 
+    {
+        block = [];
+        if (texture_format == 2)
+        {
+            for (int y = 0; y < ((blockY+blockHeight) - blockY); y++)
+            {
+                for (int x = 0; x < ((blockX+blockWidth) - blockX); x++)
+                {
+                    ubyte ia4;
+                    if (x >= texture_width || y >= texture_height)
+                    {
+                        //Block bleeds past edge of image
+                        ia4 = 0xFF;
+                    }
+                    else
+                    {
+                        Color pixel = inputImage.getPixel(x, y);
+                        ubyte intensity = cast(ubyte)round(((pixel.r * 30) + (pixel.g * 59) + (pixel.b * 11)) / 100);
+                        ia4 = 0x00;
+                        ia4 |= ((intensity << 4) & 0xF);
+                        ia4 |= (pixel.a & 0xF0);
+                        assert ((0 <= ia4) <= 0xFF);
+                    }
+                    block ~= ia4;
+                }
+            }
+            writefln("Block Length: %s", block.length);
+            assert (block.length == 32);
+            result ~= block;
+            blockX += 8;
+            if (blockX >= texture_width)
+            {
+                blockX = 0;
+                blockY += 4;
+            }
+        }
+    }*/
+    return result;
 }
 
 int extractBFN(File bfn) {
@@ -348,7 +408,15 @@ int repackBFN(string fileName) {
     	//Right now we expect end user to convert the images through other means
     	string btiFileName = fileName ~ "/" ~ "char_" ~ to!string(i) ~ ".bti";
 		ubyte[] imgData = cast(ubyte[])read(btiFileName);
-		writer.writeArray(imgData);
+        //Set Header to all zeroes
+        //writefln("Before: %s",imgData[0 .. 32]);
+        //imgData[0 .. 32] = 0;
+        //writefln("After: %s",imgData[0 .. 32]);
+		//writer.writeArray(imgData[0 .. $ - 32]);
+		writer.writeArray(imgData[32 .. $]);
+        //string pngFileName = "char_" ~ to!string(i) ~ ".png";
+        //writer.writeArray(convertImage(pngFileName, fileName, bfninfo.gly1[0].texture_format, 
+        //    bfninfo.gly1[0].texture_height, bfninfo.gly1[0].texture_width));
     }
     //WRITE MAP1 SECTION
     for (int i = 0; i < bfninfo.map1.length; i++)
@@ -361,7 +429,11 @@ int repackBFN(string fileName) {
     	writer.write(to!ushort(bfninfo.map1[i].mapping_entry_count));
     	if (bfninfo.map1[i].entries != null)
     	{
-    		writer.write(bfninfo.map1[i].entries);
+    		writer.writeArray(bfninfo.map1[i].entries);
+    	}
+    	while (writer.buffer.length % 0x20 != 0)
+    	{
+    		writer.writeArray(new ubyte[1]);
     	}
     }
     while (writer.buffer.length % 0x20 != 0)
@@ -377,6 +449,10 @@ int repackBFN(string fileName) {
     {
     	writer.write(to!ubyte(bfninfo.wid1[0].packets[i].kerning));
     	writer.write(to!ubyte(bfninfo.wid1[0].packets[i].width));
+    }
+    while (writer.buffer.length % 0x20 != 0)
+    {
+    	writer.writeArray(new ubyte[1]);
     }
     ///Begin Writing to File
     BinaryWriter header = BinaryWriter(ByteOrder.BigEndian);
