@@ -2,7 +2,6 @@
 	"fileVersion": 1,
 	"versions": {
 		"arsd-official": "10.2.1",
-		"imageformats": "7.0.2",
 		"stdx-allocator": "2.77.5",
 		"vibe-d": "0.9.3"
 	}
