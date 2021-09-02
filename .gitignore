@@ -4,7 +4,7 @@
 */.dub/
 */bin/
 */out/
-
+.vscode/
 .dub
 docs.json
 __dummy.html
@@ -22,3 +22,9 @@ bfntoolkit-test-*
 *.lst
 *.bfn
 bfnTool.py
+
+.texturework/
+
+pikmin2main/
+
+pikmin2mainJPN/
