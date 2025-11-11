@@ -16,6 +16,12 @@ Run the executable in CLI/Terminal. There are two ways you can use bfntoolkit:
 At this time, bfntoolkit cannot accurately reconvert the png images into the bti format specified by the bfn, you will have to use a separate tool to convert png to bti.
 <br/>Wiimms Szs Tools(https://szs.wiimm.de/download.html) is recommended because wimgt can be used to quickly convert all images in a folder with the use of the 
 batch command provided in the repository
+
+Example command:
+```
+wimgt.exe encode *.png --transform=BTI.IA4 --dest "%N.bti" --n-mipmaps 0
+```
+
 <br/>The rest of the bfn data is stored inside data.json in the folder, information on the elements and sections can be found at https://wiki.cloudmodding.com/tww/BFN
 
 
